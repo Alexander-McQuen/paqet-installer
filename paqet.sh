@@ -1,7 +1,6 @@
 #!/bin/bash
 
-# Paqet Installer & Manager Script
-# Created for Easy Installation
+# Paqet Installer & Manager Script v1.2 (Fixed Version URL)
 
 # Colors
 RED='\033[0;31m'
@@ -16,13 +15,8 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 function get_net_info() {
-    # Find Interface
     INTERFACE=$(ip route | grep default | awk '{print $5}' | head -n1)
-    
-    # Find Server IP
     SERVER_IP=$(ip -4 addr show $INTERFACE | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -n1)
-    
-    # Find Gateway IP & MAC
     GATEWAY_IP=$(ip route | grep default | awk '{print $3}' | head -n1)
     ping -c 1 $GATEWAY_IP > /dev/null 2>&1
     ROUTER_MAC=$(ip neigh show | grep $GATEWAY_IP | awk '{print $5}' | head -n1)
@@ -32,26 +26,56 @@ function install_paqet() {
     echo -e "${GREEN}Installing Paqet...${NC}"
     
     # 1. Install Dependencies
-    apt-get update -q
+    apt-get update
     apt-get install -y libpcap-dev net-tools wget curl
 
     # 2. Get Port
+    echo -e "${YELLOW}--------------------------------${NC}"
     read -p "Enter Port to use (Default 8443): " PORT
     PORT=${PORT:-8443}
 
     # 3. Detect Info
     get_net_info
     if [ -z "$ROUTER_MAC" ]; then
-        echo -e "${RED}Error: Could not detect Router MAC. Aborting.${NC}"
+        echo -e "${RED}Error: Could not detect Router MAC. Please check your network.${NC}"
         return
     fi
 
-    # 4. Download
-    wget -q https://github.com/hanselime/paqet/releases/download/v0.1.0/paqet_linux_amd64_v1.tar.gz
-    tar -xzf paqet_linux_amd64_v1.tar.gz
+    # 4. Download (UPDATED LINK)
+    echo -e "${YELLOW}Downloading binary (v1.0.0-alpha.11)...${NC}"
+    
+    # Remove old files
+    rm -f paqet*.tar.gz
+    rm -f paqet
+    
+    # Correct URL for the latest alpha release
+    DOWNLOAD_URL="https://github.com/hanselime/paqet/releases/download/v1.0.0-alpha.11/paqet-linux-amd64-v1.0.0-alpha.11.tar.gz"
+    FILENAME="paqet-linux-amd64-v1.0.0-alpha.11.tar.gz"
+
+    curl -L -o "$FILENAME" "$DOWNLOAD_URL"
+
+    if [ ! -f "$FILENAME" ]; then
+        echo -e "${RED}Download FAILED! Check internet connection.${NC}"
+        return
+    fi
+    
+    # Extract
+    echo "Extracting..."
+    tar -xzf "$FILENAME"
+    
+    # Find the binary (it might be named differently inside)
+    # Move any file starting with 'paqet' that is executable to /usr/local/bin/paqet
+    find . -maxdepth 1 -type f -name "paqet*" ! -name "*.tar.gz" -exec mv {} paqet \;
+    
+    if [ ! -f "paqet" ]; then
+        echo -e "${RED}Extraction FAILED! Binary not found.${NC}"
+        ls -lh
+        return
+    fi
+
     chmod +x paqet
     mv paqet /usr/local/bin/
-    rm paqet_linux_amd64_v1.tar.gz
+    rm -f "$FILENAME"
 
     # 5. Config
     mkdir -p /etc/paqet
@@ -103,8 +127,8 @@ function uninstall_paqet() {
     echo -e "${RED}Uninstalling Paqet...${NC}"
     systemctl stop paqet
     systemctl disable paqet
-    rm /etc/systemd/system/paqet.service
-    rm /usr/local/bin/paqet
+    rm -f /etc/systemd/system/paqet.service
+    rm -f /usr/local/bin/paqet
     rm -rf /etc/paqet
     systemctl daemon-reload
     echo -e "${GREEN}Paqet removed successfully.${NC}"
@@ -114,11 +138,18 @@ function uninstall_paqet() {
 function update_paqet() {
     echo -e "${GREEN}Updating Binary...${NC}"
     systemctl stop paqet
-    wget -q https://github.com/hanselime/paqet/releases/download/v0.1.0/paqet_linux_amd64_v1.tar.gz
-    tar -xzf paqet_linux_amd64_v1.tar.gz
+    
+    DOWNLOAD_URL="https://github.com/hanselime/paqet/releases/download/v1.0.0-alpha.11/paqet-linux-amd64-v1.0.0-alpha.11.tar.gz"
+    FILENAME="paqet-linux-amd64-v1.0.0-alpha.11.tar.gz"
+    
+    curl -L -o "$FILENAME" "$DOWNLOAD_URL"
+    tar -xzf "$FILENAME"
+    find . -maxdepth 1 -type f -name "paqet*" ! -name "*.tar.gz" -exec mv {} paqet \;
+    
     chmod +x paqet
     mv paqet /usr/local/bin/
-    rm paqet_linux_amd64_v1.tar.gz
+    rm -f "$FILENAME"
+    
     systemctl start paqet
     echo -e "${GREEN}Update Complete.${NC}"
     read -p "Press Enter to continue..."
@@ -128,7 +159,7 @@ function update_paqet() {
 while true; do
     clear
     echo -e "${YELLOW}================================${NC}"
-    echo -e "    Paqet Manager v1.0"
+    echo -e "    Paqet Manager v1.2"
     echo -e "${YELLOW}================================${NC}"
     echo "1. Install Paqet"
     echo "2. Uninstall Paqet"
